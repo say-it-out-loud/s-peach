@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.1 — 2026-03-20
+
+### Added
+
+- **Windows support (partial)** — `s-peach serve`, CLI client commands, and Claude Code hooks now work on Windows
+- **Windows hook script** — `.bat` notifier for Claude Code hooks on Windows (`.sh` on POSIX)
+- **Platform-aware paths** — config uses `%APPDATA%`, runtime uses `%TEMP%`, state uses `%LOCALAPPDATA%` on Windows
+- **Platform-aware CLI** — editor fallback (`notepad` on Windows), display paths use `%USERPROFILE%`
+
+### Fixed
+
+- **Daemon startup** — fixed `No module named s_peach.main` crash (refactor missed `daemon.py` subprocess command)
+- **Structlog exception rendering** — fixed `ModuleNotFoundError: pygments.lexers.python` crash when `logger.exception()` was called
+- **Stale doc references** — fixed `main.py` references in CONTRIBUTING.md and feature docs after module split
+
+### Changed
+
+- Pinned `kokoro==0.9.4` and `ruff==0.15.6`
+- Replaced `print()` calls in `service.py` with structured logging
+- POSIX-only commands (`start/stop/restart/status/logs`, `install-service`) show a clear error on Windows
+- Doctor server check skips daemon PID check on Windows, still checks port and health
+
 ## 0.1.0 — 2026-03-19
 
 Initial release.
