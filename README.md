@@ -1,6 +1,8 @@
 <h1 align="center">s-peach</h1>
 <h3 align="center"><em>Give your AI a voice.</em></h3>
-<p align="center">Stop reading logs. Hear when your code is done.</p>
+<p align="center">Give your AI a voice.<br>
+Stop checking.<br>
+Hear a short summary instead.</p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/say-it-out-loud/s-peach/refs/heads/master/assets/s-peach.jpg" alt="s-peach banner" width="100%">
@@ -15,7 +17,7 @@
 
 ---
 
-`s-peach` is a TTS notification server for AI agents with support for summaries.
+`s-peach` is a TTS cli and notification server for AI agents that summarizes task results in two sentences.
 
 Hook it up to notification services through CLI, REST, or MCP.
 
