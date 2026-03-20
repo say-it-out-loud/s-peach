@@ -81,6 +81,55 @@ class TestExtractJsonField:
         data = {"output": "string_not_dict"}
         assert _extract_json_field(data, ".output.text") is None
 
+    # --- Array indexing ---
+
+    def test_array_index_simple(self) -> None:
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {"choices": [{"message": {"content": "Hello"}}]}
+        assert _extract_json_field(data, ".choices[0].message.content") == "Hello"
+
+    def test_array_index_non_first(self) -> None:
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {"items": ["a", "b", "c"]}
+        assert _extract_json_field(data, ".items[2]") == "c"
+
+    def test_array_index_out_of_bounds(self) -> None:
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {"items": ["a"]}
+        assert _extract_json_field(data, ".items[5]") is None
+
+    def test_array_index_on_non_list(self) -> None:
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {"items": "not a list"}
+        assert _extract_json_field(data, ".items[0]") is None
+
+    def test_array_index_nested(self) -> None:
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {"a": [{"b": [{"c": "deep"}]}]}
+        assert _extract_json_field(data, ".a[0].b[0].c") == "deep"
+
+    def test_array_index_returns_none_for_non_string(self) -> None:
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {"items": [42]}
+        assert _extract_json_field(data, ".items[0]") is None
+
+    def test_openai_style_response(self) -> None:
+        """The README example: .choices[0].message.content"""
+        from s_peach.cli.notify import _extract_json_field
+
+        data = {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Build complete."}}
+            ]
+        }
+        assert _extract_json_field(data, ".choices[0].message.content") == "Build complete."
+
 
 # ---------------------------------------------------------------------------
 # _extract_claude_jsonl

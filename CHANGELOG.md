@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 — 2026-03-20
+
+### Added
+
+- **Array indexing in dot-path expressions** — `source: ".choices[0].message.content"` now works in notify config
+
 ## 1.0.1 — 2026-03-20
 
 ### Added

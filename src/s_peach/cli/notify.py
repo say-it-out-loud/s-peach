@@ -78,18 +78,36 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _extract_json_field(data: dict, expression: str) -> str | None:
-    """Extract a field using a dot-path expression like '.foo.bar'. Returns None if missing."""
+    """Extract a field using a dot-path expression like '.foo.bar' or '.foo[0].bar'.
+
+    Supports dict key traversal and array indexing (e.g. '.choices[0].message.content').
+    Returns None if any segment is missing or the wrong type.
+    """
     if not expression.startswith("."):
         return None
-    # Strip leading dot and split: ".foo.bar" -> ["foo", "bar"]
+    import re
+
+    # Split on "." but keep bracket indices attached: ".choices[0].message" -> ["choices[0]", "message"]
     parts = expression[1:].split(".")
     current: object = data
     for part in parts:
         if not part:
             continue
-        if not isinstance(current, dict):
-            return None
-        current = current.get(part)
+        # Split "key[0]" into key + index, or just key
+        match = re.match(r"^([^\[]*)\[(\d+)\]$", part)
+        if match:
+            key, idx = match.group(1), int(match.group(2))
+            if key:
+                if not isinstance(current, dict):
+                    return None
+                current = current.get(key)
+            if not isinstance(current, list) or idx >= len(current):
+                return None
+            current = current[idx]
+        else:
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
         if current is None:
             return None
     if isinstance(current, str):
