@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 — 2026-03-21
+
+### Added
+
+- **Skip sessions when doing summaries with claude** — `claude -p` now running with extra flag ` --no-session-persistence`
+
 ## 1.0.2 — 2026-03-20
 
 ### Added

@@ -13,9 +13,9 @@ language: "en"                # Default language (ISO 639-1 code)
 
 summary:
   enabled: true              # Summarize before speaking (hook only — `s-peach say` uses --summary flag)
-  command: 'claude -p "$1" --model sonnet'  # Summarize command. Receives text on stdin, prompt as $1.
+  command: 'claude -p --no-session-persistence "$1" --model sonnet'  # Summarize command. Receives text on stdin, prompt as $1.
                              # Examples:
-                             #   'claude -p "$1" --model haiku'
+                             #   'claude -p --no-session-persistence "$1" --model haiku'
                              #   'ollama run llama3 "$1"'
   source: ".last_assistant_message"  # How to extract text from hook stdin:
                              #  - ".xyz"         = jq expression on stdin JSON (any valid jq selector)

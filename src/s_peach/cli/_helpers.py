@@ -114,7 +114,7 @@ def _summarize_text_with_prompt(text: str, notifier: dict, prompt_key: str) -> s
     Falls back to original text if summarization fails.
     """
     summary_cfg = notifier.get("summary", {})
-    command = summary_cfg.get("command", 'claude -p "$1" --model sonnet')
+    command = summary_cfg.get("command", 'claude -p --no-session-persistence "$1" --model sonnet')
     prompt = summary_cfg.get(
         prompt_key,
         "Summarize what was just accomplished or what's happening "
@@ -150,7 +150,7 @@ def _summarize_text(text: str, notifier: dict) -> str:
     Falls back to original text if summarization fails.
     """
     summary_cfg = notifier.get("summary", {})
-    command = summary_cfg.get("command", 'claude -p "$1" --model sonnet')
+    command = summary_cfg.get("command", 'claude -p --no-session-persistence "$1" --model sonnet')
     prompt = summary_cfg.get(
         "say_prompt",
         "Condense the following text into 1-2 short sentences suitable for "
