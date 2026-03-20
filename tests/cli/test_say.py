@@ -444,6 +444,8 @@ class TestSay:
         monkeypatch.delenv("S_PEACH_API_KEY", raising=False)
         # Point to empty config dir — no client.yaml
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+        # Pre-create dir so auto-init doesn't scaffold a client.yaml with an API key
+        (tmp_path / "xdg" / "s-peach").mkdir(parents=True)
 
         with patch("s_peach.cli.say.httpx.post") as mock_post:
             mock_post.return_value = httpx.Response(

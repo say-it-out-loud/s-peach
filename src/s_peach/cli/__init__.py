@@ -39,6 +39,13 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(1)
 
+    # Auto-scaffold config on first run for commands that need it.
+    _NO_CONFIG_NEEDED = {"init", "doctor", "install-hook", "uninstall-hook"}
+    if args.command not in _NO_CONFIG_NEEDED:
+        from s_peach.cli._helpers import _ensure_config
+
+        _ensure_config()
+
     if args.command == "serve":
         _cmd_serve(args)
     elif args.command == "say":

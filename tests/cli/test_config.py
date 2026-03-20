@@ -80,6 +80,8 @@ class TestConfig:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+        # Pre-create dir so auto-init doesn't trigger, but leave files absent
+        (tmp_path / "xdg" / "s-peach").mkdir(parents=True)
         code, _, err = run_main("config", "server")
         assert code == 1
         assert "does not exist" in err
@@ -103,6 +105,8 @@ class TestConfig:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+        # Pre-create dir so auto-init doesn't trigger, but leave files absent
+        (tmp_path / "xdg" / "s-peach").mkdir(parents=True)
         code, _, err = run_main("config", "client")
         assert code == 1
         assert "does not exist" in err

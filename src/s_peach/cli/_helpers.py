@@ -7,6 +7,35 @@ import subprocess
 import sys
 
 
+def _ensure_config() -> None:
+    """Auto-scaffold config if the config directory doesn't exist.
+
+    Runs the equivalent of ``s-peach init --defaults`` so first-time users
+    get a working setup without an extra manual step.
+    """
+    from s_peach.paths import config_dir
+
+    if config_dir().exists():
+        return
+
+    from s_peach.scaffolding import init_scaffolding
+
+    try:
+        actions = init_scaffolding()
+    except Exception:
+        # Don't block the command — the user can always run init manually.
+        print(
+            "Hint: run 's-peach init' to create config files.",
+            file=sys.stderr,
+        )
+        return
+
+    print("First run detected — created default config files:", file=sys.stderr)
+    for action in actions:
+        print(f"  {action}", file=sys.stderr)
+    print("Tip: run 's-peach config server' to customize.\n", file=sys.stderr)
+
+
 def _resolve_url(args_url: str | None) -> str:
     """Resolve server URL from flag, env var, client.yaml, server.yaml, or default.
 

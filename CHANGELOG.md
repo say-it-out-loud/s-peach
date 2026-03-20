@@ -5,6 +5,7 @@
 ### Added
 
 - **Array indexing in dot-path expressions** — `source: ".choices[0].message.content"` now works in notify config
+- **Auto-init on first run** — commands that need config automatically scaffold defaults when `~/.config/s-peach/` doesn't exist (prints what was created; falls back to a hint on failure)
 
 ## 1.0.1 — 2026-03-20
 
