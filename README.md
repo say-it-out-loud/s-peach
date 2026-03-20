@@ -71,6 +71,7 @@ uv tool install "s-peach-tts[chatterbox]" \
 ```bash
 s-peach init              # scaffold config home dir
 s-peach serve             # start the server in foreground
+# In other terminal
 s-peach say "Hello world" # test it out
 ```
 
@@ -91,24 +92,14 @@ s-peach config client      # edit config for default model/voice
 s-peach reload             # reload with new option
 ```
 
-## Summaries
+## Run in background
 
-The client can summarize agent output before speaking it aloud. It's using `claude -p` by default.<br>
-Disable or change to something appropriate (ask your AI for help):
-```yaml
-summary:
-  enabled: true
-  command: 'ollama run llama3 "$1"'
-  source: ".choices[0].message.content"
-```
-
-Summarize long text before speaking — useful for piping logs, diffs, or agent output:
 ```bash
-s-peach say --summary "$(git diff)"
-cat build.log | s-peach say --summary
-echo "Long explanation..." | s-peach say --summary
+s-peach start               # start the daemon
+s-peach status              # check that it's running
+s-peach say "Hello World"   # test it out
+s-peach stop                # stop the daemon
 ```
-The summarization prompts are configurable in the client config.
 
 ## Run as a service
 
@@ -153,7 +144,7 @@ Some flags for `s-peach say`:
 | `--exaggeration 0.5` | `0.0 – 2.0` (chatterbox full) |
 | `--cfg-weight 0.5` | `0.0 – 2.0` (chatterbox full) |
 | `--lang "en"` | Language code (kokoro: en, gb, ja, zh, es, fr, hi, it, pt; chatterbox-multi: 23 languages) |
-| `--summary` | Summarize the text before speaking |
+| `--summary` | Summarize the text before speaking. Note: **`--summary` requires claude code or custom config**|
 | `--save` | Save audio as WAV to `~/.config/s-peach/output/` |
 
 
@@ -188,27 +179,41 @@ Even though summary is on by default through client config, the hook accepts all
 so you can can have separate voices for different repos. Sweet!
 
 ```json
-"hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/s-peach-notifier.sh --model kitten-micro --voice Rosie",
-            "async": true
-          }
-        ]
-      }
-    ]
-  }
+"command": "bash ~/.claude/scripts/s-peach-notifier.sh --model kitten-micro --voice Rosie",
 ```
+
+Its also possible to send an override to skip summaries
+```json
+"command": "bash ~/.claude/scripts/s-peach-notifier.sh --no-summary",
+```
+
+## Summaries
+
+The client can summarize agent output before speaking it aloud. It's using `claude -p` by default.<br>
+Update the command section in your client config `s-peach config client` to something appropriate (ask your AI for help):
+```yaml
+summary:
+  command: 'ollama run llama3 "$1"'
+  source: ".choices[0].message.content"
+```
+
+The summarization prompts are also configurable in the client config.
+
+### `--summary` examples
+Summarize long text before speaking — useful for piping logs, diffs, or agent output:
+```bash
+s-peach say --summary "$(git diff)"
+cat build.log | s-peach say --summary
+echo "Long explanation..." | s-peach say --summary
+```
+
 
 **3. MCP — tool-based TTS for agents:**
 
 Connect your MCP client to `http://localhost:7777/mcp` (SSE transport). <br>
 Available tools: `speak`, `speak_sync`, `list_voices`, `say_that_again`.
 
-## Chatterbox and 0-shot voices
+## Chatterbox and 0-shot voice cloning
 
 - Put voice samples longer than 5s in `~/.config/s-peach/voices`
 - Update server config `s-peach config server`
