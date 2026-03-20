@@ -1,0 +1,40 @@
+# s-peach client configuration
+# Used by hooks and the `s-peach say` command to find the server.
+
+host: "localhost"
+port: 7777
+api_key: "your-secret-key"    # API key (if server requires one)
+model: "kokoro"               # Default TTS model
+voice: "Bella_US"             # Default voice
+speed: 1.0                    # Playback speed multiplier (0.1–5.0)
+language: "en"                # Default language (ISO 639-1 code)
+# exaggeration: 0.5           # Chatterbox full - exaggeration factor
+# cfg_weight: 0.5             # Chatterbox full - CFG weight
+
+summary:
+  enabled: true              # Summarize before speaking (hook only — `s-peach say` uses --summary flag)
+  command: 'claude -p "$1" --model sonnet'  # Summarize command. Receives text on stdin, prompt as $1.
+                             # Examples:
+                             #   'claude -p "$1" --model haiku'
+                             #   'ollama run llama3 "$1"'
+  source: ".last_assistant_message"  # How to extract text from hook stdin:
+                             #  - ".xyz"         = jq expression on stdin JSON (any valid jq selector)
+                             #  - "claude_jsonl"  = read full JSONL conversation file (Claude Code specific)
+                             #  - "raw"           = use stdin as-is (plain text, any format)
+                             # Examples:
+                             #   ".last_assistant_message"        (Claude Code — default)
+                             #   ".output.text"                   (custom tool)
+                             #   ".choices[0].message.content"    (OpenAI-style)
+  tail_lines: 25             # Trim text to last N lines before summarizing
+  max_length: 500            # Truncate TTS message to this many chars
+  notify_prompt: >-          # Prompt for hook summarization (used by notifier script)
+    Summarize what was just accomplished or what's happening
+    in 1-2 short sentences. Be concise as this will be read aloud
+    as a TTS notification.
+    No code, no markdown, no bullet points, no tricky values,
+    just plain speech.
+  say_prompt: >-           # Prompt for `s-peach say --summary`
+    Condense the following text into 1-2 short sentences suitable for
+    text-to-speech. Keep the meaning and tone.
+    No code, no markdown, no bullet points, no tricky values,
+    just plain speech.

@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+.ruff_cache
+*.so
+worktrees/
+.DS_Store
+dumps/
+security-scan.md
+docs/brainstorming
+docs/plans
+uv.lock

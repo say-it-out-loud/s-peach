@@ -1,0 +1,98 @@
+[project]
+name = "s-peach-tts"
+version = "1.0.1"
+description = "Give your AI a voice. Hear your code finish."
+requires-python = ">=3.11,<3.14"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Johan Hernefeldt", email = "level-over-9000@proton.me"}]
+keywords = ["tts", "text-to-speech", "notification", "speech", "audio", "ai", "agent", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Software Development :: Libraries",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+]
+
+dependencies = [
+    "fastapi==0.115.12",
+    "uvicorn==0.34.2",
+    "pydantic==2.11.3",
+    "pydantic-settings==2.9.1",
+    "pyyaml==6.0.2",
+    "structlog==25.1.0",
+    "sounddevice==0.5.1",
+    "numpy==2.2.6",
+    "httpx==0.28.1",
+    "mcp==1.26.0",
+    "kokoro==0.9.4",
+    # kittentts 0.8.1 and en_core_web_sm 3.8.0 are vendored in src/s_peach/_vendor/
+    # kittentts deps (most already pulled in by kokoro):
+    "num2words==0.5.14",
+    "spacy>=3.7",
+    "espeakng-loader==0.2.4",
+    "misaki[en]>=0.9.4",
+    "onnxruntime==1.24.3",
+    "soundfile==0.13.1",
+    "huggingface_hub==0.36.2",
+]
+
+[project.scripts]
+s-peach = "s_peach.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/say-it-out-loud/s-peach"
+Repository = "https://github.com/say-it-out-loud/s-peach"
+Issues = "https://github.com/say-it-out-loud/s-peach/issues"
+Documentation = "https://github.com/say-it-out-loud/s-peach/tree/master/docs"
+
+[project.optional-dependencies]
+chatterbox = [
+    "chatterbox-tts==0.1.6",
+]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/s_peach"]
+artifacts = [
+    "src/s_peach/defaults/*.yaml",
+    "src/s_peach/defaults/voices/*.wav",
+    "src/s_peach/data/*.sh",
+    "src/s_peach/data/*.bat",
+    "src/s_peach/_vendor/**/LICENSE",
+]
+
+[tool.uv]
+# chatterbox-tts overpins numpy<1.26 and torch==2.6.0, but works fine with
+# numpy 2.x and torch 2.10. Override to let the resolver use our versions.
+override-dependencies = [
+    "numpy==2.2.6",
+    "torch>=2.6.0",
+    "torchaudio>=2.6.0",
+    "transformers>=4.46.3",
+    "safetensors>=0.5.3",
+    "diffusers>=0.29.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.5",
+    "pytest-asyncio==0.25.3",
+    "ruff==0.15.6",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "model: tests that require TTS model to be available",
+]
