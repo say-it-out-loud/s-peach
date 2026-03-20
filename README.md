@@ -1,7 +1,6 @@
 <h1 align="center">s-peach</h1>
 <h3 align="center"><em>Give your AI a voice.</em></h3>
-<p align="center">Give your AI a voice.<br>
-Stop checking.<br>
+<p align="center">Stop checking.<br>
 Hear a short summary instead.</p>
 
 <p align="center">
@@ -11,8 +10,14 @@ Hear a short summary instead.</p>
 
 <p align="center">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue">
-  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
+  <img alt="PyPI version" src="https://img.shields.io/pypi/v/s-peach-tts">
+  <img alt="CLI" src="https://img.shields.io/badge/CLI-tool-000000">
+  <img alt="Daemon mode" src="https://img.shields.io/badge/daemon-mode-2ea44f">
+  <img alt="Claude Code hook" src="https://img.shields.io/badge/Claude%20Code-hook-8A2BE2">
+  <img alt="MCP compatible" src="https://img.shields.io/badge/MCP-compatible-0A66C2">
+  <img alt="uv | pip install" src="https://img.shields.io/badge/install-uv%20tool%20%7C%20pip-blue">
   <img alt="Platform macOS | Linux | Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
 </p>
 
 ---
