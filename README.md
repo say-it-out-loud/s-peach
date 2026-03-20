@@ -144,7 +144,7 @@ Some flags for `s-peach say`:
 | `--exaggeration 0.5` | `0.0 – 2.0` (chatterbox full) |
 | `--cfg-weight 0.5` | `0.0 – 2.0` (chatterbox full) |
 | `--lang "en"` | Language code (kokoro: en, gb, ja, zh, es, fr, hi, it, pt; chatterbox-multi: 23 languages) |
-| `--summary` | Summarize the text before speaking. Note: **`--summary` requires claude code or custom config**|
+| `--summary` | Summarize the text before speaking (uses the summary command from client.yaml) |
 | `--save` | Save audio as WAV to `~/.config/s-peach/output/` |
 
 
@@ -175,17 +175,22 @@ or add this stop hook to your settings.json
 This wires Claude Code to call s-peach whenever a task finishes.
 You'll hear the result without looking at the terminal.
 
-Even though summary is on by default through client config, the hook accepts all `s-peach say` flags
-so you can can have separate voices for different repos. Sweet!
+Even though summary is on by default through client config, the hook accepts all `s-peach notify` flags
+so you can have separate voices for different repos. Sweet!
 
 ```json
 "command": "bash ~/.claude/scripts/s-peach-notifier.sh --model kitten-micro --voice Rosie",
 ```
 
-Its also possible to send an override to skip summaries
+It's also possible to skip summaries
 ```json
 "command": "bash ~/.claude/scripts/s-peach-notifier.sh --no-summary",
 ```
+
+**3. MCP — tool-based TTS for agents:**
+
+Connect your MCP client to `http://localhost:7777/mcp` (SSE transport). <br>
+Available tools: `speak`, `speak_sync`, `list_voices`, `say_that_again`.
 
 ## Summaries
 
@@ -206,12 +211,6 @@ s-peach say --summary "$(git diff)"
 cat build.log | s-peach say --summary
 echo "Long explanation..." | s-peach say --summary
 ```
-
-
-**3. MCP — tool-based TTS for agents:**
-
-Connect your MCP client to `http://localhost:7777/mcp` (SSE transport). <br>
-Available tools: `speak`, `speak_sync`, `list_voices`, `say_that_again`.
 
 ## Chatterbox and 0-shot voice cloning
 
