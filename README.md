@@ -65,10 +65,10 @@ Chatterbox models are **not installed by default** — they add ~750 MB of Pytho
 ### Install with uv
 ```bash
 # default install
-uv tool install s-peach-tts
+uv tool install --python 3.13 s-peach-tts
 
 # with chatterbox voice cloning (chatterbox requires some pin overrides)
-uv tool install "s-peach-tts[chatterbox]" \
+uv tool install --python 3.13 "s-peach-tts[chatterbox]" \
   --overrides <(echo -e "numpy>=2.0\ntorch>=2.6.0\ntorchaudio>=2.6.0")
 ```
 

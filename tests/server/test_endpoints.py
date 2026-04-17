@@ -117,6 +117,42 @@ class TestVoices:
         assert isinstance(data, list)
 
 
+class TestDedupCheck:
+    """In-memory dedup FIFO — first POST returns seen=false and records the key."""
+
+    def test_first_call_returns_not_seen(self, client: TestClient) -> None:
+        resp = client.post("/dedup/check", json={"key": "abc123"})
+        assert resp.status_code == 200
+        assert resp.json() == {"seen": False}
+
+    def test_second_call_with_same_key_returns_seen(self, client: TestClient) -> None:
+        client.post("/dedup/check", json={"key": "dup-key"})
+        resp = client.post("/dedup/check", json={"key": "dup-key"})
+        assert resp.status_code == 200
+        assert resp.json() == {"seen": True}
+
+    def test_different_keys_are_independent(self, client: TestClient) -> None:
+        assert client.post("/dedup/check", json={"key": "k-a"}).json() == {"seen": False}
+        assert client.post("/dedup/check", json={"key": "k-b"}).json() == {"seen": False}
+        assert client.post("/dedup/check", json={"key": "k-a"}).json() == {"seen": True}
+
+    def test_oldest_entry_is_evicted_when_fifo_fills(self, settings: Settings) -> None:
+        """Once the FIFO overflows, the oldest key can be re-submitted as new."""
+        from s_peach.server.models import DEDUP_MAX_ENTRIES
+
+        with _patched_app(settings) as (app, _mock_model):
+            with TestClient(app) as c:
+                assert c.post("/dedup/check", json={"key": "oldest"}).json() == {"seen": False}
+                for i in range(DEDUP_MAX_ENTRIES):
+                    c.post("/dedup/check", json={"key": f"filler-{i}"})
+                # "oldest" should have been evicted.
+                assert c.post("/dedup/check", json={"key": "oldest"}).json() == {"seen": False}
+
+    def test_missing_key_returns_422(self, client: TestClient) -> None:
+        resp = client.post("/dedup/check", json={})
+        assert resp.status_code == 422
+
+
 class TestSpeakSync:
     def test_valid_request_returns_200_with_duration(self, settings: Settings) -> None:
         def slow_play(audio, sr, fade_ms=10, silence_pad_ms=300, trim_end_ms=0):

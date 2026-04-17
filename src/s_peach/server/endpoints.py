@@ -11,7 +11,15 @@ from fastapi.responses import JSONResponse
 
 from s_peach.audio import AudioItem, play_direct, post_process
 from s_peach.server.helpers import generate_audio, perform_reload, validate_and_generate, validate_request
-from s_peach.server.models import AppState, SpeakRequest, SpeakResponse, SpeakSyncResponse, _ValidatedRequest
+from s_peach.server.models import (
+    AppState,
+    DedupCheckRequest,
+    DedupCheckResponse,
+    SpeakRequest,
+    SpeakResponse,
+    SpeakSyncResponse,
+    _ValidatedRequest,
+)
 
 logger = structlog.get_logger()
 
@@ -163,6 +171,21 @@ def register_routes(app: FastAPI) -> None:
             )
 
         return SpeakResponse(status="queued", queue_size=app_state.queue.size())
+
+    @app.post("/dedup/check", response_model=DedupCheckResponse)
+    async def dedup_check(req: DedupCheckRequest, request: Request) -> DedupCheckResponse:
+        """Atomically test whether a client-supplied key was recently seen.
+
+        Used by `s-peach notify` to collapse the Stop-hook cascade that fires
+        when `claude -p` runs during summarization. First call for a key returns
+        `seen=false` and records the key; subsequent calls within the FIFO
+        window return `seen=true`. State is in-memory and resets on restart.
+        """
+        app_state: AppState = request.app.state.app_state
+        if req.key in app_state.dedup_seen:
+            return DedupCheckResponse(seen=True)
+        app_state.dedup_seen.append(req.key)
+        return DedupCheckResponse(seen=False)
 
     @app.get("/health")
     async def health(request: Request) -> dict:

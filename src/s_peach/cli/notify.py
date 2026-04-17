@@ -3,11 +3,40 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 
 import httpx
 
 from s_peach.cli import _helpers
+
+
+def _dedup_key(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def _server_says_seen(url: str, api_key: str | None, dedup_value: str, timeout: float) -> bool:
+    """Ask the server if this hook/material hash was already seen.
+
+    The server keeps an in-memory FIFO — atomic check-and-add per request. Any
+    transport/server failure falls through as "not seen" so the notification
+    still fires rather than being silently dropped.
+    """
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["X-API-Key"] = api_key
+    try:
+        response = httpx.post(
+            f"{url}/dedup/check",
+            json={"key": _dedup_key(dedup_value)},
+            headers=headers,
+            timeout=timeout,
+        )
+        if response.status_code >= 400:
+            return False
+        return bool(response.json().get("seen", False))
+    except (httpx.HTTPError, ValueError):
+        return False
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -174,6 +203,7 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     stdin_text = ""
     if not sys.stdin.isatty():
         stdin_text = sys.stdin.read().strip()
+    dedup_value = stdin_text
 
     notifier = _helpers._load_notifier_config()
     summary_cfg = notifier.get("summary", {})
@@ -244,6 +274,24 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
                 message = "All tasks complete."
 
     assert message is not None
+    if has_content:
+        dedup_value = message
+    elif not dedup_value:
+        dedup_value = message
+
+    # Resolve server URL/auth up front so dedup can ask the server first.
+    url = _helpers._resolve_url(getattr(args, "url", None))
+    api_key = _helpers._resolve_api_key()
+    timeout = getattr(args, "timeout", 30.0)
+
+    # Dedup repeated notifications before any summary or /speak call. Use the
+    # extracted assistant message when available so repeated Stop-hook events
+    # still collapse even if session_id/transcript_path/cwd differ between
+    # invocations. Fallback messages with no extracted content dedupe on their
+    # final text.
+    if dedup_value:
+        if _server_says_seen(url, api_key, dedup_value, timeout):
+            return
 
     # Summarize if enabled and we have real content
     if summarize_enabled and has_content:
@@ -255,10 +303,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
             message = summary[:max_length]
     else:
         message = message[:max_length]
-
-    # Send to server via /speak — CLI args override client.yaml
-    url = _helpers._resolve_url(getattr(args, "url", None))
-    api_key = _helpers._resolve_api_key()
 
     body: dict = {"text": message}
     model = getattr(args, "model", None) or notifier.get("model")
@@ -292,7 +336,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     if api_key:
         headers["X-API-Key"] = api_key
     quiet = getattr(args, "quiet", False)
-    timeout = getattr(args, "timeout", 30.0)
 
     try:
         response = httpx.post(

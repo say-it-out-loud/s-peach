@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 — 2026-04-17
+
+### Fixed
+
+- **Repeated Claude Code Stop-hook notifications on newer Claude Code versions** — `s-peach notify` now dedupes before summary and before `/speak`, using the hashed text extracted from `client.yaml` `.summary.source` as the key.
+Depending on which version you are using, you might want to `s-peach uninstall-hook claude-code` and then `s-peach install-hook claude-code`
+
 ## 1.0.3 — 2026-03-21
 
 ### Added

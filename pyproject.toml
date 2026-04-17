@@ -1,6 +1,6 @@
 [project]
 name = "s-peach-tts"
-version = "1.0.3"
+version = "1.0.4"
 description = "Give your AI a voice. Hear your code finish."
 requires-python = ">=3.11,<3.14"
 readme = "README.md"
