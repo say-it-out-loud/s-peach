@@ -7,6 +7,15 @@ import subprocess
 import sys
 
 
+def _summary_workdir() -> str:
+    """Return an isolated working directory for summary subprocesses."""
+    from s_peach.paths import config_dir
+
+    path = config_dir()
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
+
 def _ensure_config() -> None:
     """Auto-scaffold config if the config directory doesn't exist.
 
@@ -124,6 +133,7 @@ def _summarize_text_with_prompt(text: str, notifier: dict, prompt_key: str) -> s
     )
     max_length = int(summary_cfg.get("max_length", 500))
     timeout_secs = int(summary_cfg.get("timeout", 30))
+    workdir = _summary_workdir()
 
     try:
         result = subprocess.run(
@@ -132,6 +142,7 @@ def _summarize_text_with_prompt(text: str, notifier: dict, prompt_key: str) -> s
             capture_output=True,
             text=True,
             timeout=timeout_secs,
+            cwd=workdir,
         )
         summary = result.stdout.strip()
         if summary:
@@ -159,6 +170,7 @@ def _summarize_text(text: str, notifier: dict) -> str:
     )
     max_length = int(summary_cfg.get("max_length", 500))
     timeout_secs = int(summary_cfg.get("timeout", 30))
+    workdir = _summary_workdir()
 
     try:
         result = subprocess.run(
@@ -167,6 +179,7 @@ def _summarize_text(text: str, notifier: dict) -> str:
             capture_output=True,
             text=True,
             timeout=timeout_secs,
+            cwd=workdir,
         )
         summary = result.stdout.strip()
         if summary:

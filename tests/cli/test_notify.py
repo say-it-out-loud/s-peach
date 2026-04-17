@@ -1169,6 +1169,31 @@ class TestNotifySubcommand:
         assert args.quiet is True
 
 
+class TestSummarizeHelperCwd:
+    """Summary subprocess should run from an isolated workdir."""
+
+    def test_summary_subprocess_uses_config_dir_as_cwd(self, tmp_path: Path) -> None:
+        from s_peach.cli._helpers import _summarize_text_with_prompt
+
+        cfg = _mock_notifier_config(
+            enabled=True,
+            command='claude -p "$1" --model sonnet',
+            notify_prompt="Summarize this.",
+        )
+
+        completed = MagicMock()
+        completed.stdout = "summary"
+
+        with (
+            patch("s_peach.cli._helpers.subprocess.run", return_value=completed) as mock_run,
+            patch("s_peach.paths.config_dir", return_value=tmp_path / "config" / "s-peach"),
+        ):
+            result = _summarize_text_with_prompt("Task done", cfg, "notify_prompt")
+
+        assert result == "summary"
+        assert mock_run.call_args.kwargs["cwd"] == str(tmp_path / "config" / "s-peach")
+
+
 # ---------------------------------------------------------------------------
 # Notifier shell script — verify it's a thin wrapper
 # ---------------------------------------------------------------------------
