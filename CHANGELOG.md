@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.7 — 2026-04-17
+
+### Fixed
+
+- **Claude Code summary hook recursion** — Summary subprocesses now run from the isolated s-peach config directory instead of the active project, so `claude -p` no longer walks the triggering repo and loads unrelated `CLAUDE.md` files.
+- **Stop hooks emitted by the summary subprocess** — `s-peach notify` now ignores Claude Stop-hook payloads whose `cwd` is the isolated summary workdir (`config_dir()`), which prevents recursive notifications even when the summary output text changes between runs.
+- **Duplicate real hook deliveries** — Dedup is still applied before summary and before `/speak`, using the text extracted from `client.yaml` `summary.source` as the key. With the default config, repeated Stop-hook payloads that share the same `.last_assistant_message` only play once even if `session_id` or `transcript_path` differ.
+- **Server-down summary waste** — `/dedup/check` is now treated as the liveness gate. If it cannot connect, times out, or returns an error, `notify` aborts immediately without running the summary command or calling `/speak`. The dedup check uses a short 3-second timeout.
+
 ## 1.0.6 — 2026-04-17
 
 - **Improvements to claude code summary defaults** Improved claude summary command and prompt.

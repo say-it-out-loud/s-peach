@@ -351,6 +351,34 @@ class TestCmdNotifyJqExpression:
         body = mock_post.call_args.kwargs["json"]
         assert body["text"] == "All tasks complete."
 
+    def test_ignores_hooks_from_summary_workdir(self, tmp_path: Path) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        summary_dir = tmp_path / "config" / "s-peach"
+        hook_json = json.dumps({
+            "session_id": "be03c696-42e3-4d9b-a62d-a7175528069a",
+            "transcript_path": str(tmp_path / "projects" / "be03c696.jsonl"),
+            "cwd": str(summary_dir),
+            "permission_mode": "default",
+            "hook_event_name": "Stop",
+            "stop_hook_active": False,
+            "last_assistant_message": "A Kubernetes Service manifest was created.",
+        })
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.paths.config_dir", return_value=summary_dir),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=_mock_notifier_config()),
+            patch("s_peach.cli._helpers._resolve_url") as mock_url,
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
+        ):
+            _cmd_notify(_make_args())
+
+        mock_url.assert_not_called()
+        mock_post.assert_not_called()
+        mock_summarize.assert_not_called()
+
 
 class TestCmdNotifyRaw:
     """Notify with raw source mode."""

@@ -198,6 +198,14 @@ def _extract_claude_jsonl(transcript_path: str, tail_lines: int) -> str | None:
     return "\n".join(lines[-tail_lines:]) if lines else None
 
 
+def _is_summary_subprocess_hook(hook_data: dict) -> bool:
+    """Return True when a hook event came from the isolated summary workdir."""
+    cwd = hook_data.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        return False
+    return cwd == _helpers._summary_workdir()
+
+
 def _cmd_notify(args: argparse.Namespace) -> None:
     """Process hook notification from stdin and speak via server.
     Always exits 0 -- errors are printed to stderr but never cause failure.
@@ -217,6 +225,17 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     if not sys.stdin.isatty():
         stdin_text = sys.stdin.read().strip()
     dedup_value = stdin_text
+    hook_data: dict = {}
+    if stdin_text:
+        try:
+            parsed = json_mod.loads(stdin_text)
+            if isinstance(parsed, dict):
+                hook_data = parsed
+        except (ValueError, TypeError):
+            hook_data = {}
+
+    if hook_data and _is_summary_subprocess_hook(hook_data):
+        return
 
     notifier = _helpers._load_notifier_config()
     summary_cfg = notifier.get("summary", {})
@@ -245,11 +264,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
         has_content = True
     elif source == "claude_jsonl":
         # Try to read JSONL transcript file
-        try:
-            hook_data = json_mod.loads(stdin_text)
-        except (ValueError, TypeError):
-            hook_data = {}
-
         transcript_path = hook_data.get("transcript_path")
         if transcript_path:
             extracted = _extract_claude_jsonl(str(transcript_path), tail_lines)
@@ -268,11 +282,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
             message = "All tasks complete."
     else:
         # Source starts with "." — treat as dot-path expression on stdin JSON
-        try:
-            hook_data = json_mod.loads(stdin_text)
-        except (ValueError, TypeError):
-            hook_data = {}
-
         extracted = _extract_json_field(hook_data, source)
         if extracted:
             message = extracted
