@@ -10,6 +10,30 @@ import httpx
 from s_peach.cli import _helpers
 
 
+def _server_available(url: str, headers: dict[str, str]) -> bool:
+    """Return True when the s-peach server responds successfully to /health."""
+    try:
+        response = httpx.get(
+            f"{url}/health",
+            headers=headers,
+            timeout=3.0,
+        )
+    except httpx.ConnectError:
+        print(f"notify: cannot connect to server at {url}", file=sys.stderr)
+        return False
+    except httpx.TimeoutException:
+        print("notify: request timed out", file=sys.stderr)
+        return False
+    except Exception as exc:
+        print(f"notify: {exc}", file=sys.stderr)
+        return False
+
+    if response.status_code >= 400:
+        print(f"notify: server returned {response.status_code}", file=sys.stderr)
+        return False
+    return True
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     """Register notify subcommand."""
     notify_parser = subparsers.add_parser(
@@ -180,6 +204,13 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     source = summary_cfg.get("source", ".last_assistant_message")
     tail_lines = int(summary_cfg.get("tail_lines", 20))
     max_length = int(summary_cfg.get("max_length", 500))
+    url = _helpers._resolve_url(getattr(args, "url", None))
+    api_key = _helpers._resolve_api_key()
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["X-API-Key"] = api_key
+    quiet = getattr(args, "quiet", False)
+    timeout = getattr(args, "timeout", 30.0)
     # CLI flags override config: --summary forces on, --no-summary forces off
     if getattr(args, "no_summary", False):
         summarize_enabled = False
@@ -245,6 +276,9 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
 
     assert message is not None
 
+    if not _server_available(url, headers):
+        return
+
     # Summarize if enabled and we have real content
     if summarize_enabled and has_content:
         # Truncate to tail_lines before summarizing
@@ -257,9 +291,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
         message = message[:max_length]
 
     # Send to server via /speak — CLI args override client.yaml
-    url = _helpers._resolve_url(getattr(args, "url", None))
-    api_key = _helpers._resolve_api_key()
-
     body: dict = {"text": message}
     model = getattr(args, "model", None) or notifier.get("model")
     if model:
@@ -287,12 +318,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
         lang = notifier.get("language")
     if lang is not None:
         body["language"] = lang
-
-    headers: dict[str, str] = {}
-    if api_key:
-        headers["X-API-Key"] = api_key
-    quiet = getattr(args, "quiet", False)
-    timeout = getattr(args, "timeout", 30.0)
 
     try:
         response = httpx.post(

@@ -10,6 +10,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _mock_notify_health_check():
+    """Default notify health probe to an available server unless overridden."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    with patch("s_peach.cli.notify.httpx.get", return_value=mock_response):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # _extract_json_field
 # ---------------------------------------------------------------------------
@@ -660,6 +669,72 @@ class TestCmdNotifySummarization:
 
         mock_summarize.assert_called_once()
 
+    def test_skips_summary_when_server_unavailable(self) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        import httpx
+
+        hook_json = json.dumps({"last_assistant_message": "Detailed build output here"})
+        cfg = _mock_notifier_config(enabled=True)
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
+            patch("s_peach.cli.notify.httpx.get", side_effect=httpx.ConnectError("refused")),
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+        ):
+            _cmd_notify(_make_args())
+
+        mock_summarize.assert_not_called()
+        mock_post.assert_not_called()
+
+    def test_skips_summary_when_server_health_times_out(self) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        import httpx
+
+        hook_json = json.dumps({"last_assistant_message": "Detailed build output here"})
+        cfg = _mock_notifier_config(enabled=True)
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
+            patch("s_peach.cli.notify.httpx.get", side_effect=httpx.TimeoutException("timed out")),
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+        ):
+            _cmd_notify(_make_args())
+
+        mock_summarize.assert_not_called()
+        mock_post.assert_not_called()
+
+    def test_skips_summary_when_server_health_returns_error(self) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        hook_json = json.dumps({"last_assistant_message": "Detailed build output here"})
+        cfg = _mock_notifier_config(enabled=True)
+        health_response = MagicMock()
+        health_response.status_code = 503
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
+            patch("s_peach.cli.notify.httpx.get", return_value=health_response),
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+        ):
+            _cmd_notify(_make_args())
+
+        mock_summarize.assert_not_called()
+        mock_post.assert_not_called()
+
 
 class TestSummaryRunnerIsolation:
     def test_summary_runs_from_isolated_claude_dir(
@@ -710,6 +785,69 @@ class TestCmdNotifyErrorHandling:
 
         captured = capsys.readouterr()
         assert "cannot connect" in captured.err
+
+    def test_health_error_aborts_before_speak(self, capsys) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        import httpx
+
+        hook_json = json.dumps({"last_assistant_message": "test"})
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=_mock_notifier_config()),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli.notify.httpx.get", side_effect=httpx.ConnectError("refused")),
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+        ):
+            _cmd_notify(_make_args())
+
+        captured = capsys.readouterr()
+        assert "cannot connect" in captured.err
+        mock_post.assert_not_called()
+
+    def test_health_timeout_aborts_before_speak(self, capsys) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        import httpx
+
+        hook_json = json.dumps({"last_assistant_message": "test"})
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=_mock_notifier_config()),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli.notify.httpx.get", side_effect=httpx.TimeoutException("timed out")),
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+        ):
+            _cmd_notify(_make_args())
+
+        captured = capsys.readouterr()
+        assert "timed out" in captured.err
+        mock_post.assert_not_called()
+
+    def test_health_status_error_aborts_before_speak(self, capsys) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        hook_json = json.dumps({"last_assistant_message": "test"})
+        health_response = MagicMock()
+        health_response.status_code = 503
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=_mock_notifier_config()),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli.notify.httpx.get", return_value=health_response),
+            patch("s_peach.cli.notify.httpx.post") as mock_post,
+        ):
+            _cmd_notify(_make_args())
+
+        captured = capsys.readouterr()
+        assert "503" in captured.err
+        mock_post.assert_not_called()
 
     def test_invalid_json_stdin_uses_fallback(self) -> None:
         from s_peach.cli.notify import _cmd_notify

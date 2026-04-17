@@ -3,6 +3,7 @@
 ## 1.1.0 — 2026-04-17
 
 - **Final final fix for claude code repeating summary** By running `claude -p` in the s-peach config directory and having a separate `.claude/settings.json` override file, we could get around the headless claude looping notifications forever.
+Also skips summary if s-peach server isnt running.
 
 Depending on which version you were using, you might want to `s-peach uninstall-hook claude-code` and then `s-peach install-hook claude-code` to get new client config.
 
@@ -18,7 +19,6 @@ Depending on which version you were using, you might want to `s-peach uninstall-
 ## 1.0.6 — 2026-04-17
 
 - **Improvements to claude code summary defaults** Improved claude summary command and prompt.
-
 
 ## 1.0.5 — 2026-04-17
 

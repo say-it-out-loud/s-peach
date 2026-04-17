@@ -33,7 +33,7 @@ def check_environment() -> CheckCategory:
         # Try to actually import — sounddevice raises OSError at import time if
         # the PortAudio shared library isn't on the system.
         try:
-            sd = importlib.import_module("sounddevice")
+            sd = __import__("sounddevice")
             cat.checks.append(CheckResult(
                 name="PortAudio (sounddevice)",
                 status="ok",
