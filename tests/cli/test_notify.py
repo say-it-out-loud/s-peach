@@ -7,6 +7,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 # ---------------------------------------------------------------------------
 # _extract_json_field
@@ -612,8 +614,6 @@ class TestCmdNotifySummarization:
             _cmd_notify(_make_args())
 
         mock_summarize.assert_not_called()
-
-
     def test_no_summary_flag_overrides_config(self) -> None:
         """--no-summary disables summarization even when config says enabled."""
         from s_peach.cli.notify import _cmd_notify
@@ -659,6 +659,33 @@ class TestCmdNotifySummarization:
             _cmd_notify(_make_args(summary=True))
 
         mock_summarize.assert_called_once()
+
+
+class TestSummaryRunnerIsolation:
+    def test_summary_runs_from_isolated_claude_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from s_peach.cli._helpers import _summarize_text_with_prompt
+
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+        completed = MagicMock()
+        completed.stdout = "Short summary"
+
+        with patch("s_peach.cli._helpers.subprocess.run", return_value=completed) as mock_run:
+            result = _summarize_text_with_prompt(
+                "Long text",
+                _mock_notifier_config(enabled=True),
+                "notify_prompt",
+            )
+
+        config_home = (tmp_path / "xdg" / "s-peach").resolve()
+        claude_dir = config_home / ".claude"
+        settings_file = claude_dir / "settings.json"
+        assert result == "Short summary"
+        assert settings_file.exists()
+        assert json.loads(settings_file.read_text())["disableAllHooks"] is True
+        assert mock_run.call_args.kwargs["cwd"] == config_home
 
 
 class TestCmdNotifyErrorHandling:

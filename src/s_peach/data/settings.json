@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash",
+      "Read",
+      "Edit",
+      "WebFetch",
+      "MCP",
+      "Agent"
+    ]
+  },
+  "includeGitInstructions": false,
+  "disableAllHooks": true,
+  "env": {
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "0"
+  }
+}

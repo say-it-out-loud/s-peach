@@ -85,6 +85,16 @@ def notifier_file() -> Path:
     return config_dir() / "client.yaml"
 
 
+def claude_config_dir() -> Path:
+    """Return the isolated Claude config directory under s-peach config."""
+    return config_dir() / ".claude"
+
+
+def claude_settings_file() -> Path:
+    """Return the isolated Claude settings file under s-peach config."""
+    return claude_config_dir() / "settings.json"
+
+
 def pid_file() -> Path:
     """Return the PID file path: runtime_dir() / 's-peach.pid'."""
     return runtime_dir() / "s-peach.pid"

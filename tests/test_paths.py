@@ -70,6 +70,12 @@ class TestFilePaths:
     def test_notifier_file(self) -> None:
         assert paths.notifier_file() == paths.config_dir() / "client.yaml"
 
+    def test_claude_config_dir(self) -> None:
+        assert paths.claude_config_dir() == paths.config_dir() / ".claude"
+
+    def test_claude_settings_file(self) -> None:
+        assert paths.claude_settings_file() == paths.claude_config_dir() / "settings.json"
+
     def test_pid_file(self) -> None:
         assert paths.pid_file() == paths.runtime_dir() / "s-peach.pid"
 

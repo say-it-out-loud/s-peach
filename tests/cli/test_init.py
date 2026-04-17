@@ -20,8 +20,10 @@ class TestInit:
         cfg_dir = tmp_path / "xdg" / "s-peach"
         server_cfg = cfg_dir / "server.yaml"
         notifier_cfg = cfg_dir / "client.yaml"
+        claude_settings = cfg_dir / ".claude" / "settings.json"
         assert server_cfg.exists()
         assert notifier_cfg.exists()
+        assert claude_settings.exists()
 
     def test_init_files_have_mode_0600(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -30,10 +32,14 @@ class TestInit:
         run_main("init")
 
         cfg_dir = tmp_path / "xdg" / "s-peach"
-        for name in ("server.yaml", "client.yaml"):
-            f = cfg_dir / name
+        files = [
+            cfg_dir / "server.yaml",
+            cfg_dir / "client.yaml",
+            cfg_dir / ".claude" / "settings.json",
+        ]
+        for f in files:
             mode = f.stat().st_mode & 0o777
-            assert mode == 0o600, f"{name} has mode {oct(mode)}, expected 0o600"
+            assert mode == 0o600, f"{f.name} has mode {oct(mode)}, expected 0o600"
 
     def test_init_generates_api_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -92,6 +98,7 @@ class TestInit:
 
         assert code == 0
         assert (xdg_dir / "s-peach" / "server.yaml").exists()
+        assert (xdg_dir / "s-peach" / ".claude" / "settings.json").exists()
 
     def test_init_refuses_overwrite(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -127,4 +134,3 @@ class TestInit:
 
         # Check new file has template content
         assert "s-peach Server Configuration" in server_cfg.read_text()
-

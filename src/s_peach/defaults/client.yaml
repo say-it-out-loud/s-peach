@@ -13,7 +13,7 @@ language: "en"                # Default language (ISO 639-1 code)
 
 summary:
   enabled: true              # Summarize before speaking (hook only — `s-peach say` uses --summary flag)
-  command: 'claude -p --disable-slash-commands --no-session-persistence --system-prompt "" --tools "" --strict-mcp-config --mcp-config "{}" --model sonnet "$1"'  # Summarize command. Receives text on stdin, prompt as $1.
+  command: 'claude -p --disable-slash-commands --no-session-persistence --system-prompt "" --model sonnet "$1"'  # Summarize command. Receives text on stdin, prompt as $1.
                              # Examples:
                              #   'claude -p --no-session-persistence "$1" --model haiku'
                              #   'ollama run llama3 "$1"'

@@ -16,6 +16,12 @@ def _ensure_config() -> None:
     from s_peach.paths import config_dir
 
     if config_dir().exists():
+        try:
+            from s_peach.scaffolding import ensure_isolated_claude_settings
+
+            ensure_isolated_claude_settings()
+        except Exception:
+            pass
         return
 
     from s_peach.scaffolding import init_scaffolding
@@ -126,12 +132,17 @@ def _summarize_text_with_prompt(text: str, notifier: dict, prompt_key: str) -> s
     timeout_secs = int(summary_cfg.get("timeout", 30))
 
     try:
+        from s_peach.paths import config_dir
+        from s_peach.scaffolding import ensure_isolated_claude_settings
+
+        ensure_isolated_claude_settings()
         result = subprocess.run(
             ["bash", "-c", command, "_", prompt],
             input=text,
             capture_output=True,
             text=True,
             timeout=timeout_secs,
+            cwd=config_dir(),
         )
         summary = result.stdout.strip()
         if summary:
@@ -161,12 +172,17 @@ def _summarize_text(text: str, notifier: dict) -> str:
     timeout_secs = int(summary_cfg.get("timeout", 30))
 
     try:
+        from s_peach.paths import config_dir
+        from s_peach.scaffolding import ensure_isolated_claude_settings
+
+        ensure_isolated_claude_settings()
         result = subprocess.run(
             ["bash", "-c", command, "_", prompt],
             input=text,
             capture_output=True,
             text=True,
             timeout=timeout_secs,
+            cwd=config_dir(),
         )
         summary = result.stdout.strip()
         if summary:

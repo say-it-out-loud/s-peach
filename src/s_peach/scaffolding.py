@@ -35,6 +35,13 @@ def _bundled_notifier_config() -> str:
     return files("s_peach").joinpath("defaults", "client.yaml").read_text()
 
 
+def _bundled_claude_settings() -> str:
+    """Read the bundled isolated Claude settings shipped with the package."""
+    from importlib.resources import files
+
+    return files("s_peach").joinpath("data", "settings.json").read_text()
+
+
 def _bundled_voices_dir():
     """Return the importlib.resources Traversable for defaults/voices/."""
     from importlib.resources import files
@@ -58,15 +65,17 @@ def init_scaffolding(*, force: bool = False) -> list[str]:
         FileExistsError: If configs exist and force is False.
         OSError: If file operations fail.
     """
-    from s_peach.paths import config_dir, config_file, notifier_file
+    from s_peach.paths import claude_settings_file, config_dir, config_file, notifier_file
 
     cfg_dir = config_dir()
     server_cfg = config_file()
     notifier_cfg = notifier_file()
+    claude_settings = claude_settings_file()
 
     files_to_create = [
         (server_cfg, _bundled_server_config()),
         (notifier_cfg, _bundled_notifier_config()),
+        (claude_settings, _bundled_claude_settings()),
     ]
 
     # Check for existing files (unless --force)
@@ -87,6 +96,7 @@ def init_scaffolding(*, force: bool = False) -> list[str]:
 
     # Write files
     for filepath, template in files_to_create:
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         if force and filepath.exists():
             bak = filepath.with_suffix(filepath.suffix + ".bak")
             shutil.copy2(filepath, bak)
@@ -102,6 +112,20 @@ def init_scaffolding(*, force: bool = False) -> list[str]:
     actions.extend(voice_actions)
 
     return actions
+
+
+def ensure_isolated_claude_settings() -> list[str]:
+    """Create isolated Claude settings in config_dir()/.claude/ if missing."""
+    from s_peach.paths import claude_config_dir, claude_settings_file
+
+    settings_path = claude_settings_file()
+    if settings_path.exists():
+        return []
+
+    claude_config_dir().mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(_bundled_claude_settings())
+    settings_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
+    return [f"Created {settings_path}"]
 
 
 def _copy_bundled_voices_lib(cfg_dir) -> list[str]:
