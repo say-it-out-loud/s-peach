@@ -1,3 +1,9 @@
+<h1 align="center">Note: Claude code summaries is broken since a few claude code versions ago</h1>
+<h2 align="center">Run `s-peach uninstall-hook claude-code` for now</h2>
+<h2 align="center">Working on a work-around...</h2>
+
+---
+
 <h1 align="center">s-peach</h1>
 <h3 align="center"><em>Give your AI a voice.</em></h3>
 <p align="center">Stop checking.<br>
