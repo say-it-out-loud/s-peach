@@ -3,53 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import sys
 
 import httpx
 
 from s_peach.cli import _helpers
-
-_DEDUP_TIMEOUT_SECS = 3.0
-
-
-def _dedup_key(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:16]
-
-
-def _server_says_seen(
-    url: str,
-    api_key: str | None,
-    dedup_value: str,
-    timeout: float,
-) -> tuple[bool | None, str | None]:
-    """Ask the server if this hook/material hash was already seen.
-
-    The server keeps an in-memory FIFO — atomic check-and-add per request.
-    Returns:
-      - True if the key was already seen
-      - False if the key is new
-      - None if the dedup endpoint could not be used, plus an error message
-    """
-    headers: dict[str, str] = {}
-    if api_key:
-        headers["X-API-Key"] = api_key
-    try:
-        response = httpx.post(
-            f"{url}/dedup/check",
-            json={"key": _dedup_key(dedup_value)},
-            headers=headers,
-            timeout=timeout,
-        )
-        if response.status_code >= 400:
-            return None, f"notify: dedup endpoint returned {response.status_code}"
-        return bool(response.json().get("seen", False)), None
-    except httpx.ConnectError:
-        return None, f"notify: cannot connect to server at {url}"
-    except httpx.TimeoutException:
-        return None, f"notify: dedup check timed out after {timeout:.1f}s"
-    except (httpx.HTTPError, ValueError) as exc:
-        return None, f"notify: cannot use dedup endpoint at {url} ({exc})"
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -198,14 +156,6 @@ def _extract_claude_jsonl(transcript_path: str, tail_lines: int) -> str | None:
     return "\n".join(lines[-tail_lines:]) if lines else None
 
 
-def _is_summary_subprocess_hook(hook_data: dict) -> bool:
-    """Return True when a hook event came from the isolated summary workdir."""
-    cwd = hook_data.get("cwd")
-    if not isinstance(cwd, str) or not cwd:
-        return False
-    return cwd == _helpers._summary_workdir()
-
-
 def _cmd_notify(args: argparse.Namespace) -> None:
     """Process hook notification from stdin and speak via server.
     Always exits 0 -- errors are printed to stderr but never cause failure.
@@ -224,18 +174,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     stdin_text = ""
     if not sys.stdin.isatty():
         stdin_text = sys.stdin.read().strip()
-    dedup_value = stdin_text
-    hook_data: dict = {}
-    if stdin_text:
-        try:
-            parsed = json_mod.loads(stdin_text)
-            if isinstance(parsed, dict):
-                hook_data = parsed
-        except (ValueError, TypeError):
-            hook_data = {}
-
-    if hook_data and _is_summary_subprocess_hook(hook_data):
-        return
 
     notifier = _helpers._load_notifier_config()
     summary_cfg = notifier.get("summary", {})
@@ -264,6 +202,11 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
         has_content = True
     elif source == "claude_jsonl":
         # Try to read JSONL transcript file
+        try:
+            hook_data = json_mod.loads(stdin_text)
+        except (ValueError, TypeError):
+            hook_data = {}
+
         transcript_path = hook_data.get("transcript_path")
         if transcript_path:
             extracted = _extract_claude_jsonl(str(transcript_path), tail_lines)
@@ -282,6 +225,11 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
             message = "All tasks complete."
     else:
         # Source starts with "." — treat as dot-path expression on stdin JSON
+        try:
+            hook_data = json_mod.loads(stdin_text)
+        except (ValueError, TypeError):
+            hook_data = {}
+
         extracted = _extract_json_field(hook_data, source)
         if extracted:
             message = extracted
@@ -296,29 +244,6 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
                 message = "All tasks complete."
 
     assert message is not None
-    if has_content:
-        dedup_value = message
-    elif not dedup_value:
-        dedup_value = message
-
-    # Resolve server URL/auth up front so dedup can ask the server first.
-    url = _helpers._resolve_url(getattr(args, "url", None))
-    api_key = _helpers._resolve_api_key()
-    timeout = getattr(args, "timeout", 30.0)
-
-    # Dedup repeated notifications before any summary or /speak call. Use the
-    # extracted assistant message when available so repeated Stop-hook events
-    # still collapse even if session_id/transcript_path/cwd differ between
-    # invocations. Fallback messages with no extracted content dedupe on their
-    # final text.
-    if dedup_value:
-        dedup_timeout = min(timeout, _DEDUP_TIMEOUT_SECS)
-        seen, dedup_error = _server_says_seen(url, api_key, dedup_value, dedup_timeout)
-        if seen is None:
-            print(dedup_error or f"notify: cannot use dedup endpoint at {url}", file=sys.stderr)
-            return
-        if seen:
-            return
 
     # Summarize if enabled and we have real content
     if summarize_enabled and has_content:
@@ -330,6 +255,10 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
             message = summary[:max_length]
     else:
         message = message[:max_length]
+
+    # Send to server via /speak — CLI args override client.yaml
+    url = _helpers._resolve_url(getattr(args, "url", None))
+    api_key = _helpers._resolve_api_key()
 
     body: dict = {"text": message}
     model = getattr(args, "model", None) or notifier.get("model")
@@ -363,6 +292,7 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     if api_key:
         headers["X-API-Key"] = api_key
     quiet = getattr(args, "quiet", False)
+    timeout = getattr(args, "timeout", 30.0)
 
     try:
         response = httpx.post(

@@ -287,7 +287,7 @@ class TestCmdNotifyJqExpression:
         ):
             _cmd_notify(_make_args())
 
-        assert mock_post.call_count == 2
+        mock_post.assert_called_once()
         body = mock_post.call_args.kwargs["json"]
         assert body["text"] == "Build succeeded"
 
@@ -311,7 +311,7 @@ class TestCmdNotifyJqExpression:
         body = mock_post.call_args.kwargs["json"]
         assert body["text"] == "Custom output"
 
-    def test_session_id_does_not_override_generic_fallback(self) -> None:
+    def test_fallback_to_session_id(self) -> None:
         from s_peach.cli.notify import _cmd_notify
 
         hook_json = json.dumps({"session_id": "abc123"})
@@ -350,34 +350,6 @@ class TestCmdNotifyJqExpression:
 
         body = mock_post.call_args.kwargs["json"]
         assert body["text"] == "All tasks complete."
-
-    def test_ignores_hooks_from_summary_workdir(self, tmp_path: Path) -> None:
-        from s_peach.cli.notify import _cmd_notify
-
-        summary_dir = tmp_path / "config" / "s-peach"
-        hook_json = json.dumps({
-            "session_id": "be03c696-42e3-4d9b-a62d-a7175528069a",
-            "transcript_path": str(tmp_path / "projects" / "be03c696.jsonl"),
-            "cwd": str(summary_dir),
-            "permission_mode": "default",
-            "hook_event_name": "Stop",
-            "stop_hook_active": False,
-            "last_assistant_message": "A Kubernetes Service manifest was created.",
-        })
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.paths.config_dir", return_value=summary_dir),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=_mock_notifier_config()),
-            patch("s_peach.cli._helpers._resolve_url") as mock_url,
-            patch("s_peach.cli.notify.httpx.post") as mock_post,
-            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
-        ):
-            _cmd_notify(_make_args())
-
-        mock_url.assert_not_called()
-        mock_post.assert_not_called()
-        mock_summarize.assert_not_called()
 
 
 class TestCmdNotifyRaw:
@@ -928,245 +900,6 @@ class TestCmdNotifyBooleanNormalization:
 
 
 # ---------------------------------------------------------------------------
-# Dedup — prevent repeat notifications from claude -p Stop-hook cascade
-# ---------------------------------------------------------------------------
-
-
-class _RouteMockPost:
-    """Route `httpx.post` mocks by URL suffix — /dedup/check vs /speak."""
-
-    def __init__(self, dedup_responses: list[bool] | None = None) -> None:
-        # Queue of bool replies for /dedup/check. Defaults to "always new".
-        self.dedup_replies = list(dedup_responses or [])
-        self.speak_calls: list[dict] = []
-        self.dedup_calls: list[dict] = []
-
-    def __call__(self, url: str, **kwargs):
-        body = kwargs.get("json", {})
-        if url.endswith("/dedup/check"):
-            self.dedup_calls.append(body)
-            seen = self.dedup_replies.pop(0) if self.dedup_replies else False
-            resp = MagicMock()
-            resp.status_code = 200
-            resp.json.return_value = {"seen": seen}
-            return resp
-        if url.endswith("/speak"):
-            self.speak_calls.append(body)
-            resp = MagicMock()
-            resp.status_code = 200
-            resp.json.return_value = {"queue_size": 1}
-            return resp
-        raise AssertionError(f"unexpected URL: {url}")
-
-
-class TestNotifyDedup:
-    """Skip duplicate notifications when the server says the hash was just seen."""
-
-    def test_fires_when_server_reports_not_seen(self) -> None:
-        from s_peach.cli.notify import _cmd_notify
-
-        hook_json = json.dumps({"last_assistant_message": "Task done"})
-        route = _RouteMockPost([False])
-        cfg = _mock_notifier_config(enabled=True)
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="Task done."),
-            patch("s_peach.cli.notify.httpx.post", side_effect=route),
-        ):
-            _cmd_notify(_make_args())
-
-        assert len(route.dedup_calls) == 1
-        assert len(route.speak_calls) == 1
-
-    def test_skips_when_server_reports_seen(self) -> None:
-        from s_peach.cli.notify import _cmd_notify
-
-        hook_json = json.dumps({"last_assistant_message": "Task done"})
-        route = _RouteMockPost([True])
-        cfg = _mock_notifier_config(enabled=True)
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="summary") as mock_summarize,
-            patch("s_peach.cli.notify.httpx.post", side_effect=route),
-        ):
-            _cmd_notify(_make_args())
-
-        assert len(route.dedup_calls) == 1
-        # Skip means no summarize and no /speak — those are the calls we want to avoid.
-        mock_summarize.assert_not_called()
-        assert route.speak_calls == []
-
-    def test_dedup_request_uses_hash_not_raw_message(self) -> None:
-        """The client must send a short hash, not the raw assistant message."""
-        from s_peach.cli.notify import _cmd_notify, _dedup_key
-
-        message = "secret internal task details"
-        hook_json = json.dumps({
-            "session_id": "abc123",
-            "hook_event_name": "Stop",
-            "last_assistant_message": message,
-        })
-        route = _RouteMockPost([False])
-        cfg = _mock_notifier_config(enabled=True)
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="summary"),
-            patch("s_peach.cli.notify.httpx.post", side_effect=route),
-        ):
-            _cmd_notify(_make_args())
-
-        assert route.dedup_calls[0] == {"key": _dedup_key(message)}
-        assert message not in route.dedup_calls[0]["key"]
-
-    def test_dedup_still_applies_when_summary_disabled(self) -> None:
-        """Repeated identical hook payloads should still only notify once."""
-        from s_peach.cli.notify import _cmd_notify
-
-        hook_json = json.dumps({"last_assistant_message": "Task done"})
-        route = _RouteMockPost([True])
-        cfg = _mock_notifier_config(enabled=False)
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli.notify.httpx.post", side_effect=route),
-        ):
-            _cmd_notify(_make_args())
-
-        assert len(route.dedup_calls) == 1
-        assert route.speak_calls == []
-
-    def test_no_dedup_call_when_no_content(self) -> None:
-        """Empty stdin dedupes on the fallback spoken text."""
-        from s_peach.cli.notify import _cmd_notify
-
-        route = _RouteMockPost()
-        cfg = _mock_notifier_config(enabled=True)
-
-        with (
-            patch("sys.stdin", StringIO("")),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli.notify.httpx.post", side_effect=route),
-        ):
-            _cmd_notify(_make_args())
-
-        assert len(route.dedup_calls) == 1
-        assert len(route.speak_calls) == 1
-
-    def test_repeated_stop_events_with_different_metadata_only_speak_once(self) -> None:
-        from s_peach.cli.notify import _cmd_notify
-
-        hook_json_1 = json.dumps({
-            "session_id": "00b4d1ca-bf08-446a-b88e-adb5de52c219",
-            "transcript_path": "/home/claude/.claude/projects/-workspace-tuibridge-dev/00b4d1ca-bf08-446a-b88e-adb5de52c219.jsonl",
-            "cwd": "/workspace/tuibridge-dev",
-            "permission_mode": "default",
-            "hook_event_name": "Stop",
-            "stop_hook_active": False,
-            "last_assistant_message": "Here is a basic Kubernetes Service YAML your tuibridge relay",
-        })
-        hook_json_2 = json.dumps({
-            "session_id": "6bf5878f-efea-4f2f-8c07-6f75db6c8bb4",
-            "transcript_path": "/home/claude/.claude/projects/-workspace-tuibridge-dev/6bf5878f-efea-4f2f-8c07-6f75db6c8bb4.jsonl",
-            "cwd": "/workspace/tuibridge-dev",
-            "permission_mode": "default",
-            "hook_event_name": "Stop",
-            "stop_hook_active": False,
-            "last_assistant_message": "Here is a basic Kubernetes Service YAML your tuibridge relay",
-        })
-        route = _RouteMockPost([False, True])
-        cfg = _mock_notifier_config(enabled=True)
-
-        with (
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="Kubernetes Service YAML ready."),
-            patch("s_peach.cli.notify.httpx.post", side_effect=route),
-        ):
-            with patch("sys.stdin", StringIO(hook_json_1)):
-                _cmd_notify(_make_args())
-            with patch("sys.stdin", StringIO(hook_json_2)):
-                _cmd_notify(_make_args())
-
-        assert len(route.dedup_calls) == 2
-        assert len(route.speak_calls) == 1
-
-    def test_dedup_failure_aborts_before_summary_and_notify(self) -> None:
-        """If /dedup/check errors, stop before summary and /speak."""
-        import httpx
-        from s_peach.cli.notify import _cmd_notify
-
-        hook_json = json.dumps({"last_assistant_message": "Task done"})
-        cfg = _mock_notifier_config(enabled=True)
-
-        def side_effect(url: str, **kwargs):
-            if url.endswith("/dedup/check"):
-                raise httpx.ConnectError("unreachable")
-            resp = MagicMock()
-            resp.status_code = 200
-            resp.json.return_value = {"queue_size": 1}
-            return resp
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
-            patch("s_peach.cli.notify.httpx.post", side_effect=side_effect) as mock_post,
-        ):
-            _cmd_notify(_make_args())
-
-        assert mock_post.call_count == 1
-        mock_summarize.assert_not_called()
-        assert not any(call.args[0].endswith("/speak") for call in mock_post.call_args_list)
-
-    def test_dedup_check_uses_short_timeout(self) -> None:
-        from s_peach.cli.notify import _cmd_notify
-
-        hook_json = json.dumps({"last_assistant_message": "Task done"})
-        route = _RouteMockPost([False])
-        cfg = _mock_notifier_config(enabled=True)
-
-        with (
-            patch("sys.stdin", StringIO(hook_json)),
-            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
-            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
-            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="summary"),
-            patch("s_peach.cli.notify.httpx.post", side_effect=route) as mock_post,
-        ):
-            _cmd_notify(_make_args(timeout=30.0))
-
-        assert mock_post.call_args_list[0].kwargs["timeout"] == 3.0
-
-    def test_dedup_key_is_stable_hash(self) -> None:
-        from s_peach.cli.notify import _dedup_key
-
-        assert _dedup_key("hello") == _dedup_key("hello")
-        assert _dedup_key("hello") != _dedup_key("world")
-        # 16 hex chars = 64 bits — enough for a FIFO of tens.
-        assert len(_dedup_key("x")) == 16
-
-
-# ---------------------------------------------------------------------------
 # CLI parser
 # ---------------------------------------------------------------------------
 
@@ -1195,31 +928,6 @@ class TestNotifySubcommand:
         parser = _build_parser()
         args = parser.parse_args(["notify", "-q"])
         assert args.quiet is True
-
-
-class TestSummarizeHelperCwd:
-    """Summary subprocess should run from an isolated workdir."""
-
-    def test_summary_subprocess_uses_config_dir_as_cwd(self, tmp_path: Path) -> None:
-        from s_peach.cli._helpers import _summarize_text_with_prompt
-
-        cfg = _mock_notifier_config(
-            enabled=True,
-            command='claude -p "$1" --model sonnet',
-            notify_prompt="Summarize this.",
-        )
-
-        completed = MagicMock()
-        completed.stdout = "summary"
-
-        with (
-            patch("s_peach.cli._helpers.subprocess.run", return_value=completed) as mock_run,
-            patch("s_peach.paths.config_dir", return_value=tmp_path / "config" / "s-peach"),
-        ):
-            result = _summarize_text_with_prompt("Task done", cfg, "notify_prompt")
-
-        assert result == "summary"
-        assert mock_run.call_args.kwargs["cwd"] == str(tmp_path / "config" / "s-peach")
 
 
 # ---------------------------------------------------------------------------
