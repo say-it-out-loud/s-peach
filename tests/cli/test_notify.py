@@ -1080,8 +1080,8 @@ class TestNotifyDedup:
         assert len(route.dedup_calls) == 2
         assert len(route.speak_calls) == 1
 
-    def test_dedup_failure_falls_through_to_notify(self) -> None:
-        """If /dedup/check errors, we notify anyway rather than silently drop."""
+    def test_dedup_failure_aborts_before_summary_and_notify(self) -> None:
+        """If /dedup/check errors, stop before summary and /speak."""
         import httpx
         from s_peach.cli.notify import _cmd_notify
 
@@ -1101,14 +1101,33 @@ class TestNotifyDedup:
             patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
             patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
             patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
-            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="summary"),
+            patch("s_peach.cli._helpers._summarize_text_with_prompt") as mock_summarize,
             patch("s_peach.cli.notify.httpx.post", side_effect=side_effect) as mock_post,
         ):
             _cmd_notify(_make_args())
 
-        # One /dedup/check (failed) + one /speak.
-        assert mock_post.call_count == 2
-        assert any(call.args[0].endswith("/speak") for call in mock_post.call_args_list)
+        assert mock_post.call_count == 1
+        mock_summarize.assert_not_called()
+        assert not any(call.args[0].endswith("/speak") for call in mock_post.call_args_list)
+
+    def test_dedup_check_uses_short_timeout(self) -> None:
+        from s_peach.cli.notify import _cmd_notify
+
+        hook_json = json.dumps({"last_assistant_message": "Task done"})
+        route = _RouteMockPost([False])
+        cfg = _mock_notifier_config(enabled=True)
+
+        with (
+            patch("sys.stdin", StringIO(hook_json)),
+            patch("s_peach.cli._helpers._load_notifier_config", return_value=cfg),
+            patch("s_peach.cli._helpers._resolve_url", return_value="http://localhost:7777"),
+            patch("s_peach.cli._helpers._resolve_api_key", return_value=None),
+            patch("s_peach.cli._helpers._summarize_text_with_prompt", return_value="summary"),
+            patch("s_peach.cli.notify.httpx.post", side_effect=route) as mock_post,
+        ):
+            _cmd_notify(_make_args(timeout=30.0))
+
+        assert mock_post.call_args_list[0].kwargs["timeout"] == 3.0
 
     def test_dedup_key_is_stable_hash(self) -> None:
         from s_peach.cli.notify import _dedup_key

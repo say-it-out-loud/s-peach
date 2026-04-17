@@ -10,17 +10,26 @@ import httpx
 
 from s_peach.cli import _helpers
 
+_DEDUP_TIMEOUT_SECS = 3.0
+
 
 def _dedup_key(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:16]
 
 
-def _server_says_seen(url: str, api_key: str | None, dedup_value: str, timeout: float) -> bool:
+def _server_says_seen(
+    url: str,
+    api_key: str | None,
+    dedup_value: str,
+    timeout: float,
+) -> tuple[bool | None, str | None]:
     """Ask the server if this hook/material hash was already seen.
 
-    The server keeps an in-memory FIFO — atomic check-and-add per request. Any
-    transport/server failure falls through as "not seen" so the notification
-    still fires rather than being silently dropped.
+    The server keeps an in-memory FIFO — atomic check-and-add per request.
+    Returns:
+      - True if the key was already seen
+      - False if the key is new
+      - None if the dedup endpoint could not be used, plus an error message
     """
     headers: dict[str, str] = {}
     if api_key:
@@ -33,10 +42,14 @@ def _server_says_seen(url: str, api_key: str | None, dedup_value: str, timeout: 
             timeout=timeout,
         )
         if response.status_code >= 400:
-            return False
-        return bool(response.json().get("seen", False))
-    except (httpx.HTTPError, ValueError):
-        return False
+            return None, f"notify: dedup endpoint returned {response.status_code}"
+        return bool(response.json().get("seen", False)), None
+    except httpx.ConnectError:
+        return None, f"notify: cannot connect to server at {url}"
+    except httpx.TimeoutException:
+        return None, f"notify: dedup check timed out after {timeout:.1f}s"
+    except (httpx.HTTPError, ValueError) as exc:
+        return None, f"notify: cannot use dedup endpoint at {url} ({exc})"
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -290,7 +303,12 @@ def _cmd_notify_inner(args: argparse.Namespace, json_mod) -> None:
     # invocations. Fallback messages with no extracted content dedupe on their
     # final text.
     if dedup_value:
-        if _server_says_seen(url, api_key, dedup_value, timeout):
+        dedup_timeout = min(timeout, _DEDUP_TIMEOUT_SECS)
+        seen, dedup_error = _server_says_seen(url, api_key, dedup_value, dedup_timeout)
+        if seen is None:
+            print(dedup_error or f"notify: cannot use dedup endpoint at {url}", file=sys.stderr)
+            return
+        if seen:
             return
 
     # Summarize if enabled and we have real content

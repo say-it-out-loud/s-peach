@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5 — 2026-04-17
+
+- **Abort notify when server is down** - The last fix had an edge case where it the notification workflow could continue to summary even if s-peach server was down. Now it exits.
+
 ## 1.0.4 — 2026-04-17
 
 ### Fixed
